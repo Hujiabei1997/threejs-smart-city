@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>smart city</title>
+    <meta charset="utf-8" />
+    <meta
+            name="viewport"
+            content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
+    />
+    <style>
+        body {
+            color: #fff;
+            margin: 0px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="../build/three.js"></script>
+    <script src="../build/three.min.js"></script>
+    <script src="js/loaders/MTLLoader.js"></script>
+    <script src="js/loaders/OBJLoader.js"></script>
+    <script src="js/controls/OrbitControls.js"></script>
+    <script src="js/libs/stats.min.js"></script>
+    <!-- 引入Effect -->
+    <script src="js/postprocessing/EffectComposer.js"></script>
+    <!-- 引入Effect配套的render -->
+    <script src="js/postprocessing/RenderPass.js"></script>
+    <script src="js/postprocessing/ShaderPass.js"></script>
+    <!-- 引入各种需要的shader -->
+    <script src="js/shaders/CopyShader.js"></script>
+    <script src="js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="js/postprocessing/UnrealBloomPass.js"></script>
+    <!-- focusShader -->
+    <script src="js/shaders/FocusShader.js"></script>
+
+    <script>
+    var camera,container,renderer;
+    var ambientLight, pointLight;
+    var orbitControls,delta,clock,stats;
+    var scene = new THREE.Scene();
+    var intersects,selectObject;
+
+    // 初始化函数，包括初始化相机、场景、灯光、渲染器等
+    init()
+    //选中模型并显示信息
+    select_show()
+    // 循环渲染
+    animate()
+
+    function init(){
+        //为方便这里只添加一张静止的背景图，也可设置CubeTexture和SphereGeometry，效果更好
+        scene.background = new THREE.TextureLoader().load("背景图路径")
+
+        // 使用的是透视相机来模拟人眼视觉，可查阅相关教程设置参数符合自己的模型
+        camera = new THREE.PerspectiveCamera(
+            45,
+            window.innerWidth / window.innerHeight,
+            1,
+            200
+        );
+        //调整至适合自己模型的位置
+        camera.position.z = 40;
+        camera.position.x = 60;
+        camera.position.y = 20;
+
+        // 初始化灯光，使用环境光和点光源（亮度为0.6），也可根据展示效果使用其它类型的光
+        ambientLight = new THREE.AmbientLight(0x404040)
+        pointLight = new THREE.PointLight(0xffffff, 0.6);
+        // 将灯光加入到场景中
+        scene.add(ambientLight)
+        // 将点光源加到摄像机中使点光源跟随摄像机移动，可丰富后期处理时的灯光效果
+        camera.add(pointLight);
+        // 将摄像机加入到场景中
+        scene.add(camera);
+
+        //初始化坐标轴
+        var axes = new THREE.AxisHelper(30);
+        scene.add(axes);
+
+        // 初始化渲染器
+        renderer = new THREE.WebGLRenderer({
+            // 开启抗锯齿
+            antialias: true,
+            // 开启背景透明
+            alpha: true
+        });
+        // 将自动清除颜色缓存设置为false，这样只会在render循环开始时，将场景清理。如果设置为true，每次调用效果组合器的render()函数时，之前渲染的场景会被清理掉。
+        renderer.autoClear = false;
+        // 背景透明
+        renderer.setClearColor(0xffffff, 1);
+        //设置渲染的像素分辨率
+        renderer.setPixelRatio(window.devicePixelRatio);
+        //设置渲染的范围
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        //创建性能监视器stats
+        stats = new Stats();
+        //将带有stats的画布挂在container中，这样渲染结果才能在页面中显示
+        container.appendChild(stats.dom);
+
+        // 设置一个container，将其渲染到DOM中去，并最终将画布挂到body中
+        container = document.createElement("div");
+        container.appendChild(renderer.domElement);
+        document.body.appendChild(container);
+
+        // 初始化轨道控制器
+        orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+        //控制轨道焦点
+        orbitControls.target.set(0,0,0);
+        //自动旋转关闭
+        orbitControls.autoRotate = false;
+        //使轨道控制器可以实时工作和更新
+        clock = new THREE.Clock();
+        //设置事件点击监听器
+        addEventListener('dblclick', onMouseDblclick, false);
+    }
+
+    //实例化一个xhr对象，xhr全称为XMLHttpRequest，可以同步或异步地返回Web服务器的响应，实现实时加载状况的显示
+    //包括4个步骤：1、创建xhr对象；2、发出HTTP请求；3、接收服务器传回的数据；4、更新网页数据
+    //console.log可以在控制台实时输出模型加载情况
+    var onProgress = function (xhr) {
+        if (xhr.lengthComputable) {
+            var percentComplete = (xhr.loaded / xhr.total) * 100;
+            console.log(Math.round(percentComplete, 2) + "% downloaded");
+        }
+    };
+
+    //控制台输出错误信息
+    var onError = function(xhr) {
+        console.error(xhr);
+    }
+
+    //加载模型及纹理贴图
+    var mtl_loader = new THREE.MTLLoader();
+    var obj_loader = new THREE.OBJLoader();
+        //从路径中加载纹理贴图
+        mtl_loader.setPath("../model/smartcity/");
+        mtl_loader.load("smartcity.mtl", function(materials){
+        //将纹理预展示
+        materials.preload();
+        //从路径中加载模型，设置obj模型贴图
+        obj_loader.setMaterials(materials);
+        obj_loader.load('smartcity.obj', function(object){
+            //根据模型情况加载模型位置
+            object.position.x = 0;
+            object.position.y = 0;
+            object.position.z = 0;
+            scene.add(object);
+        }, onProgress, onError);
+    });
+
+        //鼠标双击触发方法
+        function onMouseDbclick(event) {
+            //获取 raycaster和所有模型相交的数组，其中的元素按照距离排序，越近的越靠前
+            intersects = getIntersections(event);
+            if (intersects.length != 0 && intersects[0].object instanceof THREE.Mesh) {
+                var selectObject = intersects[0].object;
+                changeMaterial(selectObject);
+            } else {
+                alert("未选中 Mesh!");
+            }
+        }
+
+        //获取与事件相交的对象数组
+        function getIntersects(event) {
+            event.preventDefault();
+            console.log("event.clientX:"+event.clientX)
+            console.log("event.clientY:"+event.clientY)
+            // 声明 raycaster 和 mouse 变量
+            var raycaster = new THREE.Raycaster();
+            var mouse = new THREE.Vector2();
+            // 通过鼠标点击位置,计算出 raycaster 所需点的位置,以屏幕为中心点,范围 -1 到 1
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            //通过鼠标点击的位置(二维坐标)和当前相机的矩阵计算出射线位置
+            raycaster.setFromCamera(mouse, camera);
+            // 获取与射线相交的对象数组，其中的元素按照距离排序，越近的越靠前，自己画还是外部的模型scene.children获取变量是一致的
+            intersects = raycaster.intersectObjects(scene.children);
+            //返回选中的对象
+            return intersects;
+        }
+
+        // 更新div的位置
+        function renderDiv(object) {
+            // 获取窗口的一半高度和宽度
+            var halfWidth = window.innerWidth / 2;
+            var halfHeight = window.innerHeight / 2;
+            // 逆转相机求出二维坐标
+            var vector = object.position.clone().project(camera);
+            // 修改 div 的位置与选中的模型相匹配
+            $("#label").css({
+                left: vector.x * halfWidth + halfWidth,
+                top: -vector.y * halfHeight + halfHeight - object.position.y
+            });
+            // 显示模型信息
+            $("#label").text("name:" + object.name);
+        }
+
+            //选中最靠近视线模型
+            function select_show() {
+                onMouseDbclick();
+                getIntersects();
+            }
+
+    //创建focusShader，focusShader是一个简单的着色器，其结果是中央区域渲染的比较锐利，单周围比较模糊。
+    var focusShader = new THREE.ShaderPass(THREE.FocusShader);
+    //关于focusShader的一些参数设置，可以自行调整达到最佳效果
+    focusShader.uniforms["screenWidth"].value = window.innerWidth;
+    focusShader.uniforms["screenHeight"].value = window.innerHeight;
+    focusShader.uniforms["sampleDistance"].value = 0.89;
+
+    //初始化renderPass,renderPass通道在指定的场景和相机的基础上渲染出一个新的场景。
+    var renderScene = new THREE.RenderPass(scene, camera);
+
+    //初始化bloomPass,bloomPass通道会使明亮区域渗入较暗的区域，模拟相机照到过多亮光的情形
+    var bloomPass = new THREE.UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        1.5,
+        0.4,
+        0.85
+        );
+
+    //设置辉光效果
+    //一些关于bloomPass通道的参数调整
+    bloomPass.threshold = 0.36;
+    bloomPass.strength = 0.6;
+    bloomPass.radius = 0;
+
+    // effectCopy
+    var effectCopy = new THREE.ShaderPass(THREE.CopyShader);
+    // 将effectCopy渲染到屏幕上
+    effectCopy.renderToScreen = true;
+
+    // 初始化 composer
+    var composer = new THREE.EffectComposer(renderer);
+    // 模版缓冲（stencil buffer），简单了解其作用主要是使得大量的本来需要多次渲染过程的效果可以简单实现，减轻图形硬件负担，详情可参考：https://blog.csdn.net/silangquan/article/details/46608915
+    composer.renderTarget1.stencilBuffer = true;
+    composer.renderTarget2.stencilBuffer = true;
+    composer.setSize(window.innerWidth, window.innerHeight);
+    composer.addPass(renderScene);
+    composer.addPass(bloomPass);
+    composer.addPass(effectCopy);
+
+    //创建Sprite进行城市模型的标识展示,Sprite通常进行半透明展示
+    var textured = THREE.TextureLoader().load("需要加载图片的路径")
+    var spriteMaterial = new THREE.SpriteMaterial({
+        color: 0xffffff,
+        //显示的内容为textured
+        map: textured
+    });
+    var sprite = new THREE.Sprite(spriteMaterial);
+    //设置sprite的位置
+    sprite.position.set(
+        19,
+        20,
+        33
+    );
+    //控制台提示加载sprite
+    console.log(sprite);
+    sprite.scale.x = 6;
+    sprite.scale.y = 7;
+    sprite.scale.z = 9;
+    scene.add(sprite);
+
+    // 基础场景创建完成，接下进行循环渲染
+    function animate() {
+        requestAnimationFrame(animate);
+        // 前面将renderer autoClear关闭了，这里要在渲染函数中手动清除
+        renderer.clear();
+        //获取时间差
+        delta = clock.getDelta();
+        //按delta时间差更新轨道控制器
+        orbitControls.update(delta);
+        //按delta时间差进行辉光渲染
+        composer.render(delta);
+        //更新性能监视器
+        stats.update();
+        //更新轨道控制器
+        orbitControls.update();
+        //如果选择的模型不为空，则在渲染时输出选中模型的信息
+        if (selectObject != undefined && selectObject != null) {
+            renderDiv(selectObject);
+        }
+        renderer.render(scene, camera);
+    }
+</script>
+</body>
+</html>
