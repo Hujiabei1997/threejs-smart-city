@@ -3,6 +3,7 @@
 
 项目组成：
 1.HTML
+
 2.创建场景（要素：scene/background/camera/render/Light/axes/）
 4.stats（性能监视器）加载
 5.Controls轨道控制器：使鼠标可以旋转角度查看模型
