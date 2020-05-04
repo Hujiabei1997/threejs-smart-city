@@ -27,8 +27,8 @@
 
 项目不足：
 
-1.three.js是Webgl的Javascript封装，可以在Web端进行3D展示，但对于城市场景缺少空间信息数据和地理底图，后续可考虑cesium(https://cesium.com/cesiumjs/),cesium是一个开源的3D Mapping，可以创建用于共享动态地理空间数据的交互式Web应用程序。
+1.three.js是Webgl的Javascript封装，可以在Web端进行3D展示，但对于城市场景缺少空间信息数据和地理底图，后续可考虑使用cesium(https://cesium.com/cesiumjs/),cesium是一个开源的3D Mapping，可以创建用于共享动态地理空间数据的交互式Web应用程序。
 
 2.项目暂时未实现一些动态效果，例如地铁在城市中穿行。路线循环流动效果可以创建一个管道，然后增加一个路径一样的贴图，设置wrap为重复，在animate中不断更改texture.offset即可。
 
-3.目前项目仅限于前端展示，没有后台服务器和数据库。后端可基于nodejs平台express框架，用户点击某一模型可向后台请求并返回数据进行弹窗显示，实现完整的系统。
+3.目前项目仅限于前端展示，没有后台服务器和数据库。后续后端可基于nodejs平台express框架，实现用户点击某一模型可向后台请求并返回数据进行弹窗显示等功能，开发一个完整的系统。
